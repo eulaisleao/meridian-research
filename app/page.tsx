@@ -278,6 +278,203 @@ function Dashboard({ data }: { data: DashboardData }) {
           );
         })()}
 
+        {/* ── CAGED ── */}
+        {(() => {
+          const c = data.caged;
+          if (!c?.historico?.length) return null;
+          return (
+            <>
+              <HR />
+              <section style={{ marginBottom: 36 }}>
+                <Lbl n="06" c={T.sig}>Emprego Formal — CAGED / BCB</Lbl>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                  <Stat label="Saldo último mês" value={`${c.saldo_ultimo >= 0 ? "+" : ""}${fmtN(c.saldo_ultimo)}`} sub={c.historico[0]?.data} color={c.saldo_ultimo >= 0 ? T.sig : T.rsk} />
+                  <Stat label="Acumulado ano" value={`${c.acumulado_ano >= 0 ? "+" : ""}${fmtN(c.acumulado_ano)}`} sub="empregos criados" color={c.acumulado_ano >= 0 ? T.sig : T.rsk} />
+                  <Stat label="Admissões (último mês)" value={fmtN(c.historico[0]?.admissoes ?? 0)} color={T.ins} />
+                  <Stat label="Desligamentos" value={fmtN(c.historico[0]?.desligamentos ?? 0)} color={T.att} />
+                </div>
+                <div style={{ background: T.w, border: `1px solid ${T.b1}`, borderRadius: 13, overflow: "hidden", boxShadow: T.sh }}>
+                  <div style={{ background: "#F5F5F7", padding: "8px 15px", borderBottom: `1px solid ${T.b1}`, fontFamily: T.mono, fontSize: 9.5, color: T.t3 }}>ÚLTIMOS MESES</div>
+                  {c.historico.map((h, i) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, padding: "8px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 11, color: T.t2 }}>{h.data}</span>
+                      <span style={{ fontFamily: T.mono, fontSize: 12, color: T.ins }}>{fmtN(h.admissoes)}</span>
+                      <span style={{ fontFamily: T.mono, fontSize: 12, color: T.att }}>{fmtN(h.desligamentos)}</span>
+                      <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 600, color: h.saldo >= 0 ? T.sig : T.rsk }}>{h.saldo >= 0 ? "+" : ""}{fmtN(h.saldo)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.t3, marginTop: 6 }}>Fonte: {c.fonte}</div>
+              </section>
+            </>
+          );
+        })()}
+
+        {/* ── Dívida pública + Reservas ── */}
+        {(() => {
+          const debt = data.publicDebt;
+          const res  = data.reserves;
+          if (!debt?.bruta_pib && !res?.valor_usd_mi) return null;
+          return (
+            <>
+              <HR />
+              <section style={{ marginBottom: 36 }}>
+                <Lbl n="07" c={T.rsk}>Fiscal e Reservas — BCB</Lbl>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {debt && debt.bruta_pib > 0 && <Stat label="Dívida bruta / PIB" value={`${fmt(debt.bruta_pib)}%`} sub={debt.data} color={T.rsk} />}
+                  {debt && debt.liquida_pib > 0 && <Stat label="Dívida líquida / PIB" value={`${fmt(debt.liquida_pib)}%`} sub={debt.data} color={T.att} />}
+                  {res && res.valor_usd_mi > 0 && <Stat label="Reservas internacionais" value={`US$ ${fmt(res.valor_usd_mi / 1000, 0)} bi`} sub={res.data} color={T.sig} />}
+                </div>
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.t3, marginTop: 8 }}>Fonte: {debt?.fonte} · {res?.fonte}</div>
+              </section>
+            </>
+          );
+        })()}
+
+        {/* ── IPEA: Desemprego, Gini, Salário Mínimo ── */}
+        {(() => {
+          const ipea = data.ipea;
+          if (!ipea || !Object.keys(ipea.indicadores).length) return null;
+          const ind = ipea.indicadores;
+          return (
+            <>
+              <HR />
+              <section style={{ marginBottom: 36 }}>
+                <Lbl n="08" c={T.prd}>Indicadores Sociais — IPEA Data</Lbl>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {ind.desocupacao && <Stat label="Taxa de desocupação" value={`${fmt(ind.desocupacao.valor)}%`} sub={`PNAD · ${ind.desocupacao.data}`} color={T.rsk} />}
+                  {ind.gini        && <Stat label="Coeficiente de Gini" value={fmt(ind.gini.valor, 3)} sub={`${ind.gini.data} · 0=igualdade, 1=máx desig.`} color={T.att} />}
+                  {ind.salario_minimo && <Stat label="Salário mínimo real" value={`R$ ${fmtN(ind.salario_minimo.valor)}`} sub={ind.salario_minimo.data} color={T.sig} />}
+                  {ind.pobreza     && <Stat label="% em pobreza (<½ SM)" value={`${fmt(ind.pobreza.valor)}%`} sub={ind.pobreza.data} color={T.rsk} />}
+                </div>
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.t3, marginTop: 8 }}>Fonte: {ipea.fonte}</div>
+              </section>
+            </>
+          );
+        })()}
+
+        {/* ── Comex Stat ── */}
+        {(() => {
+          const tb = data.tradeBalance;
+          const ufTrade = data.tradeByUF;
+          if (!tb?.exportacoes_usd && !tb?.importacoes_usd) return null;
+          const fmtUSD = (n: number) => n > 1e9 ? `US$ ${fmt(n / 1e9, 1)} bi` : `US$ ${fmt(n / 1e6, 0)} mi`;
+          return (
+            <>
+              <HR />
+              <section style={{ marginBottom: 36 }}>
+                <Lbl n="09" c={T.ins}>Comércio Exterior — Comex Stat / MDIC</Lbl>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                  {tb.exportacoes_usd > 0 && <Stat label={`Exportações Brasil (${tb.ano})`} value={fmtUSD(tb.exportacoes_usd)} color={T.sig} />}
+                  {tb.importacoes_usd > 0 && <Stat label="Importações" value={fmtUSD(tb.importacoes_usd)} color={T.att} />}
+                  {tb.saldo_usd !== 0 && <Stat label="Saldo" value={fmtUSD(tb.saldo_usd)} color={tb.saldo_usd >= 0 ? T.sig : T.rsk} />}
+                </div>
+                {ufTrade && ufTrade.exportacoes_usd > 0 && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <Stat label={`Exportações ${data.uf ?? ""}`} value={fmtUSD(ufTrade.exportacoes_usd)} color={T.sig} />
+                    <Stat label={`Importações ${data.uf ?? ""}`} value={fmtUSD(ufTrade.importacoes_usd)} color={T.att} />
+                    <Stat label="Saldo UF" value={fmtUSD(ufTrade.saldo_usd)} color={ufTrade.saldo_usd >= 0 ? T.sig : T.rsk} />
+                  </div>
+                )}
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.t3, marginTop: 8 }}>Fonte: {tb.fonte}</div>
+              </section>
+            </>
+          );
+        })()}
+
+        {/* ── ANS ── */}
+        {(() => {
+          const ans = data.ans;
+          if (!ans?.total_brasil && !ans?.uf_selecionada) return null;
+          return (
+            <>
+              <HR />
+              <section style={{ marginBottom: 36 }}>
+                <Lbl n="10" c={T.sig}>Planos de Saúde — ANS</Lbl>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {ans.total_brasil && <Stat label="Beneficiários no Brasil" value={fmtN(ans.total_brasil)} sub={ans.data_referencia} color={T.sig} />}
+                  {ans.uf_selecionada && <Stat label={`Beneficiários ${ans.uf_selecionada.uf}`} value={fmtN(ans.uf_selecionada.beneficiarios)} color={T.ins} />}
+                  {ans.total_brasil && data.population?.populacao && (
+                    <Stat label="Cobertura estimada" value={`${fmt((ans.total_brasil / data.population.populacao) * 100, 1)}%`} sub="beneficiários/população" color={T.att} />
+                  )}
+                </div>
+                {ans.por_uf && ans.por_uf.length > 3 && (
+                  <div style={{ background: T.w, border: `1px solid ${T.b1}`, borderRadius: 13, padding: "14px 16px", boxShadow: T.sh, marginTop: 12 }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 9.5, color: T.t3, marginBottom: 10 }}>TOP 10 ESTADOS POR BENEFICIÁRIOS</div>
+                    <BarChart data={ans.por_uf.slice(0, 10).map(r => ({ label: r.uf, value: r.beneficiarios / 1000 }))} />
+                    <div style={{ fontFamily: T.mono, fontSize: 9, color: T.t3, marginTop: 6 }}>em milhares</div>
+                  </div>
+                )}
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.t3, marginTop: 8 }}>Fonte: {ans.fonte}</div>
+              </section>
+            </>
+          );
+        })()}
+
+        {/* ── ANATEL ── */}
+        {(() => {
+          const at = data.anatel;
+          if (!at?.telefonia_movel?.total_acessos && !at?.banda_larga?.total_acessos) return null;
+          return (
+            <>
+              <HR />
+              <section style={{ marginBottom: 36 }}>
+                <Lbl n="11" c={T.ins}>Telecomunicações — ANATEL</Lbl>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {at.telefonia_movel?.total_acessos && (
+                    <Stat label="Linhas móveis ativas" value={fmtN(Math.round(at.telefonia_movel.total_acessos / 1e6)) + " mi"} sub={at.telefonia_movel.data_referencia} color={T.ins} />
+                  )}
+                  {at.banda_larga?.total_acessos && (
+                    <Stat label="Acessos banda larga" value={fmtN(at.banda_larga.total_acessos)} sub={at.banda_larga.data_referencia} color={T.prd} />
+                  )}
+                  {at.telefonia_movel?.total_acessos && data.population?.populacao && (
+                    <Stat
+                      label="Chips / habitante"
+                      value={fmt(at.telefonia_movel.total_acessos / data.population.populacao, 2)}
+                      sub="densidade móvel"
+                      color={T.att}
+                    />
+                  )}
+                </div>
+              </section>
+            </>
+          );
+        })()}
+
+        {/* ── Fontes disponíveis (registry) ── */}
+        <HR />
+        <section style={{ marginBottom: 36 }}>
+          <Lbl n="★">Mapa de APIs Públicas Brasileiras</Lbl>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 10, marginTop: 10 }}>
+            {([
+              { sigla:"IBGE",        status:"ativo",           cor: T.sig, bgCor: T.sigL },
+              { sigla:"BCB/SGS",     status:"ativo",           cor: T.sig, bgCor: T.sigL },
+              { sigla:"IPEA Data",   status:"ativo",           cor: T.sig, bgCor: T.sigL },
+              { sigla:"Comex Stat",  status:"ativo",           cor: T.sig, bgCor: T.sigL },
+              { sigla:"ANATEL",      status:"parcial",         cor: T.att, bgCor: T.attL },
+              { sigla:"ANS",         status:"parcial",         cor: T.att, bgCor: T.attL },
+              { sigla:"TSE",         status:"parcial",         cor: T.att, bgCor: T.attL },
+              { sigla:"CVM",         status:"parcial",         cor: T.att, bgCor: T.attL },
+              { sigla:"INEP",        status:"parcial",         cor: T.att, bgCor: T.attL },
+              { sigla:"ANP",         status:"parcial",         cor: T.att, bgCor: T.attL },
+              { sigla:"Receita Fed.",status:"chave-gratuita",  cor: T.ins, bgCor: T.insL },
+              { sigla:"Transparência",status:"chave-gratuita", cor: T.ins, bgCor: T.insL },
+              { sigla:"DATASUS",     status:"complexo",        cor: T.rsk, bgCor: T.rskL },
+              { sigla:"CFM",         status:"sem-api",         cor: T.rsk, bgCor: T.rskL },
+              { sigla:"ANVISA",      status:"complexo",        cor: T.rsk, bgCor: T.rskL },
+              { sigla:"RAIS",        status:"sem-api",         cor: T.rsk, bgCor: T.rskL },
+            ] as Array<{ sigla: string; status: string; cor: string; bgCor: string }>).map((api, i) => (
+              <div key={i} style={{ background: T.w, border: `1px solid ${T.b1}`, borderRadius: 11, padding: "10px 13px", boxShadow: T.sh, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.t0 }}>{api.sigla}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 8px", borderRadius: 100, background: api.bgCor, color: api.cor }}>{api.status}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: T.t3, marginTop: 10 }}>
+            ativo = implementado · parcial = CKAN/CSV · chave-gratuita = cadastro necessário · complexo = TabNet/SOAP
+          </div>
+        </section>
+
         {/* Erros não-críticos */}
         {data.errors.length > 0 && (
           <div style={{ padding: "10px 14px", background: T.attL, borderRadius: 10, marginBottom: 20 }}>
@@ -292,7 +489,7 @@ function Dashboard({ data }: { data: DashboardData }) {
         <div style={{ paddingTop: 20, borderTop: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
           <span style={{ fontFamily: T.serif, fontSize: 13, color: T.t3 }}>Meridian Research</span>
           <span style={{ fontFamily: T.mono, fontSize: 10, color: T.t3 }}>
-            Fontes: IBGE · BCB/SGS · dados públicos gratuitos
+            Fontes: IBGE · BCB/SGS · IPEA · Comex Stat · ANS · ANATEL · dados públicos gratuitos
           </span>
         </div>
       </div>

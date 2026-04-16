@@ -28,17 +28,23 @@ export type Topic =
   | "imobiliario"
   | "agro"
   | "tecnologia"
+  | "comex"
+  | "energia"
+  | "telecom"
   | "geral";
 
 const TOPIC_KEYWORDS: Record<Topic, string[]> = {
-  saude: ["saúde","clínica","hospital","médico","oftalmolog","catarata","plano de saúde","healthtech","farmácia","cirurgia","dental","odontolog"],
-  fintech: ["fintech","banco","crédito","open finance","banking","pagamento","pix","cartão","seguros","investimento","b3","bolsa"],
-  educacao: ["educação","escola","universidade","ensino","edtech","cursos","capacitação"],
-  varejo: ["varejo","loja","e-commerce","marketplace","moda","alimentação","restaurante","franquia"],
-  imobiliario: ["imóvel","imobiliário","construção","incorporadora","aluguel","retrofit","loteamento"],
-  agro: ["agro","agricultura","pecuária","soja","milho","café","commodities","rurais"],
-  tecnologia: ["tecnologia","software","saas","startup","ti","desenvolvimento","app","inteligência artificial","ia"],
-  geral: [],
+  saude:      ["saúde","clínica","hospital","médico","oftalmolog","catarata","plano de saúde","healthtech","farmácia","cirurgia","dental","odontolog","sus","ans","operadora"],
+  fintech:    ["fintech","banco","crédito","open finance","banking","pagamento","pix","cartão","seguros","investimento","b3","bolsa","fundo","câmbio","empréstimo"],
+  educacao:   ["educação","escola","universidade","ensino","edtech","cursos","capacitação","enem","vestibular","mec"],
+  varejo:     ["varejo","loja","e-commerce","marketplace","moda","alimentação","restaurante","franquia","consumo","supermercado"],
+  imobiliario:["imóvel","imobiliário","construção","incorporadora","aluguel","retrofit","loteamento","fii","fundos imobiliários"],
+  agro:       ["agro","agricultura","pecuária","soja","milho","café","commodities","rurais","fazenda","colheita","cana","exportação agrícola"],
+  tecnologia: ["tecnologia","software","saas","startup","ti","desenvolvimento","app","inteligência artificial","ia","dados","cloud","nuvem"],
+  comex:      ["comércio exterior","exportação","importação","balança comercial","mdic","ncm","tarifa","aduaneiro"],
+  energia:    ["energia","petróleo","gás","anp","combustível","elétrica","solar","eólica","renovável","aneel"],
+  telecom:    ["telecom","telecomunicação","anatel","internet","banda larga","5g","fibra","operadora de telefonia"],
+  geral:      [],
 };
 
 export function parseQuery(query: string): { uf?: string; topics: Topic[] } {
