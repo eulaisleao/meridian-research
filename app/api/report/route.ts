@@ -1,24 +1,34 @@
 /**
  * POST /api/report
  *
- * Fluxo:
- *  1. Planner Agent (Claude + tools) → decide e executa chamadas às APIs públicas
- *  2. Report Generator (Claude) → gera relatório enriquecido com dados reais
+ * Sem IA. Apenas APIs públicas gratuitas:
+ *   - IBGE: população, pirâmide etária, PIB/capita, renda
+ *   - BCB:  SELIC, IPCA, câmbio, inflação saúde, crédito/PIB
  *
- * Retorna Server-Sent Events para que o frontend mostre progresso em tempo real.
+ * Retorna Server-Sent Events com progresso e dados finais.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import { runPlannerAgent } from "@/lib/planner";
-import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompts";
-import type { ProgressEvent, Report } from "@/lib/types";
+import {
+  fetchPopulation,
+  fetchAgePyramid,
+  fetchPIBPerCapita,
+  fetchHouseholdIncome,
+} from "@/lib/apis/ibge";
+import {
+  fetchEconomicIndicators,
+  fetchIPCAHistory,
+  fetchHealthInflation,
+  fetchCreditToPIB,
+} from "@/lib/apis/bcb";
+import { parseQuery } from "@/lib/query-parser";
+import type { DashboardData, ProgressEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // 2 min — geração pode ser lenta
+export const maxDuration = 30;
 
 const encoder = new TextEncoder();
 
-function sseEvent(event: ProgressEvent): Uint8Array {
+function sse(event: ProgressEvent): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
 }
 
@@ -29,78 +39,83 @@ export async function POST(req: Request) {
     return Response.json({ error: "query obrigatória" }, { status: 400 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json(
-      { error: "ANTHROPIC_API_KEY não configurada. Crie .env.local com a chave." },
-      { status: 500 }
-    );
-  }
-
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: ProgressEvent) => controller.enqueue(sseEvent(event));
+      const send = (event: ProgressEvent) => controller.enqueue(sse(event));
 
       try {
-        // ── Step 1: Planner Agent ──────────────────────────────────────────────
-        send({ type: "progress", step: "planning", msg: "Analisando o tema e planejando pesquisa..." });
+        const { uf, topics } = parseQuery(query);
 
-        const context = await runPlannerAgent(query, (msg) => {
-          send({ type: "progress", step: "fetching", msg });
-        });
+        send({ type: "progress", msg: `Identificado: ${uf ? `estado ${uf}` : "Brasil"} · tópicos: ${topics.join(", ")}` });
 
-        if (context.sources.length > 0) {
-          send({
-            type: "progress",
-            step: "fetching",
-            msg: `Dados reais coletados: ${context.sources.length} fonte(s) — ${context.sources.join(", ")}`,
-          });
-        } else {
-          send({ type: "progress", step: "fetching", msg: "Nenhuma API pública aplicável ao tema — usando dados do modelo." });
+        // ── Decide quais APIs chamar com base no tópico ──────────────────────
+        const isSaude    = topics.includes("saude");
+        const isFintech  = topics.includes("fintech");
+
+        // Sempre buscamos: população, indicadores econômicos, IPCA
+        const fetches: Array<[string, () => Promise<unknown>]> = [
+          ["IBGE · população", () => fetchPopulation(uf)],
+          ["IBGE · pirâmide etária", () => fetchAgePyramid(uf)],
+          ["IBGE · PIB per capita", () => fetchPIBPerCapita(uf)],
+          ["IBGE · renda domiciliar", () => fetchHouseholdIncome(uf)],
+          ["BCB · indicadores macro", () => fetchEconomicIndicators(["selic", "selic_meta", "ipca", "cambio_usd", "pib_crescimento"])],
+          ["BCB · histórico IPCA", () => fetchIPCAHistory()],
+        ];
+
+        if (isSaude) {
+          fetches.push(["BCB · inflação saúde", () => fetchHealthInflation()]);
         }
 
-        // ── Step 2: Report Generator ───────────────────────────────────────────
-        send({ type: "progress", step: "generating", msg: "Gerando relatório com análise estratégica..." });
-
-        const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 8000,
-          system: buildSystemPrompt(),
-          messages: [{ role: "user", content: buildUserPrompt(query, context) }],
-        });
-
-        const textBlock = response.content.find(b => b.type === "text");
-        if (!textBlock || textBlock.type !== "text") {
-          throw new Error(`Resposta vazia. stop_reason: ${response.stop_reason}`);
+        if (isFintech) {
+          fetches.push(["BCB · crédito/PIB", () => fetchCreditToPIB()]);
         }
 
-        const text = textBlock.text;
-        const s = text.indexOf("{");
-        const e = text.lastIndexOf("}");
+        // ── Executa em paralelo com progresso ─────────────────────────────────
+        send({ type: "progress", msg: `Consultando ${fetches.length} fontes em paralelo...` });
 
-        if (s === -1 || e <= s) {
-          throw new Error(`JSON não encontrado na resposta. Recebido: "${text.slice(0, 300)}"`);
+        const results = await Promise.allSettled(
+          fetches.map(async ([label, fn]) => {
+            const data = await fn();
+            send({ type: "progress", msg: `✓ ${label}` });
+            return { label, data };
+          })
+        );
+
+        // ── Monta o dashboard ─────────────────────────────────────────────────
+        const sources: string[] = [];
+        const errors: string[] = [];
+        const resolved: Record<string, unknown> = {};
+
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          const label = fetches[i][0];
+          if (r.status === "fulfilled") {
+            resolved[label] = r.value.data;
+            sources.push(label);
+          } else {
+            errors.push(`${label}: ${r.reason}`);
+          }
         }
 
-        let report: Report;
-        try {
-          report = JSON.parse(text.slice(s, e + 1)) as Report;
-        } catch (err) {
-          throw new Error(`JSON inválido: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        const dashboard: DashboardData = {
+          query,
+          uf,
+          generatedAt: new Date().toISOString(),
+          population:      resolved["IBGE · população"] as DashboardData["population"],
+          agePyramid:      resolved["IBGE · pirâmide etária"] as DashboardData["agePyramid"],
+          pib:             resolved["IBGE · PIB per capita"] as DashboardData["pib"],
+          income:          resolved["IBGE · renda domiciliar"] as DashboardData["income"],
+          economic:        resolved["BCB · indicadores macro"] as DashboardData["economic"],
+          ipca:            resolved["BCB · histórico IPCA"] as DashboardData["ipca"],
+          healthInflation: resolved["BCB · inflação saúde"] as DashboardData["healthInflation"],
+          creditToPIB:     resolved["BCB · crédito/PIB"] as DashboardData["creditToPIB"],
+          sources,
+          errors,
+        };
 
-        // Garante que real_data_sources reflita as fontes reais
-        if (context.sources.length > 0) {
-          report.real_data_sources = context.sources;
-        }
-
-        send({ type: "report", data: report });
+        send({ type: "dashboard", data: dashboard });
       } catch (err) {
-        send({
-          type: "error",
-          message: err instanceof Error ? err.message : String(err),
-        });
+        send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
         controller.close();
       }
